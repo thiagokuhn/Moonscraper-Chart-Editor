@@ -1,13 +1,15 @@
 ﻿#define HACKY_PLUGIN_FIX
 
 using UnityEditor;
+using UnityEditor.Build;
+using UnityEditor.Build.Reporting;
 using System.IO;
 using System.Linq;
 using UnityEngine;
 using System.Collections.Generic;
 using System.Text;
 
-public class BuildManager  {
+public class BuildManager : IPostprocessBuildWithReport  {
     const string applicationName = "Moonscraper Chart Editor";
 
     // 7-Zip.exe location
@@ -15,6 +17,8 @@ public class BuildManager  {
 
     // Inno Setup 6 ISCC.exe location
     static readonly string InstallerProgramPath = System.Environment.GetEnvironmentVariable("ISCC");
+
+    public int callbackOrder => 0;
 
     [System.Flags]
     public enum BuildFlags
@@ -277,6 +281,11 @@ public class BuildManager  {
         }
 #endif
 
+        if (buildTarget == BuildTarget.StandaloneOSX)
+        {
+            PostProcessBuildMacOS(Path.Combine(path, executableName));
+        }
+
         if ((buildFlags & BuildFlags.BuildInstaller) != 0)
         {
             string ScriptFolderPath = Path.GetFullPath(Path.Combine(Application.dataPath, "../../Installer/Scripts/"));
@@ -393,5 +402,23 @@ public class BuildManager  {
         }
 
         Debug.Log("Build target complete!");
+    }
+
+    public void OnPostprocessBuild(BuildReport buildReport)
+    {
+        if (EditorUserBuildSettings.activeBuildTarget == BuildTarget.StandaloneOSX)
+            PostProcessBuildMacOS(buildReport.summary.outputPath);
+    }
+
+    private static void PostProcessBuildMacOS(string executablePath)
+    {
+        string dylibPath = Path.Combine(executablePath, "Contents/Frameworks/MonoEmbedRuntime/osx");
+        Directory.CreateDirectory(dylibPath);
+
+        foreach (string filePath in Directory.GetFiles("Assets/Plugins", "*.dylib", SearchOption.AllDirectories))
+        {
+            string fileName = Path.GetFileName(filePath);
+            File.Copy(filePath, Path.Combine(dylibPath, fileName), true);
+        }
     }
 }
